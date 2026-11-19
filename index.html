@@ -1,0 +1,762 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Flip Street</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=DM+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a sticky ledger bar on top, then either the street (10 lots) or a job site: house picture + numbers left, work orders right. */
+:root{
+  --bg:#e6eef2; --panel:#ffffff; --panel2:#f3f7f9; --ink:#15233b; --muted:#5b6b82; --line:#c9d6de;
+  --sign:#d5322b; --sign-ink:#ffffff; --money:#187a44; --loss:#b3261e; --star:#e9a81c; --sky1:#bfe3f5; --sky2:#eaf6fb; --grass:#6fae5a;
+  --display:"Alfa Slab One","Rockwell","Georgia",serif; --body:"DM Sans",system-ui,sans-serif; --mono:"DM Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0f1826; --panel:#182437; --panel2:#1f2e45; --ink:#e8eef6; --muted:#9aabc2; --line:#2e405c;
+  --sign:#ef5148; --sign-ink:#ffffff; --money:#4cc37f; --loss:#ff7a70; --star:#f5c04a; --sky1:#1c3350; --sky2:#27456a; --grass:#3d6b3a; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#0f1826; --panel:#182437; --panel2:#1f2e45; --ink:#e8eef6; --muted:#9aabc2; --line:#2e405c;
+  --sign:#ef5148; --sign-ink:#ffffff; --money:#4cc37f; --loss:#ff7a70; --star:#f5c04a; --sky1:#1c3350; --sky2:#27456a; --grass:#3d6b3a; color-scheme:dark }
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 48px}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+h1,h2,h3{font-family:var(--display);font-weight:400;margin:0;text-wrap:balance;letter-spacing:.01em}
+h1{font-size:clamp(28px,5vw,44px);line-height:1.05} h2{font-size:22px} h3{font-size:17px}
+p{margin:0}
+.wrap{max-width:1120px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)} .good{color:var(--money)} .bad{color:var(--loss)}
+.label{font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-weight:700}
+
+/* ledger bar */
+.hud{position:sticky;top:env(safe-area-inset-top,0px);z-index:9;background:var(--bg);padding-block:10px;border-bottom:2px solid var(--ink)}
+.hud-in{max-width:1120px;margin:0 auto;display:flex;flex-wrap:wrap;gap:8px 22px;align-items:center}
+.brand{font-family:var(--display);font-size:20px;background:var(--sign);color:var(--sign-ink);padding:2px 10px;transform:rotate(-2deg);border-radius:3px}
+.stat{display:flex;flex-direction:column;min-width:0}
+.stat b{font-family:var(--mono);font-weight:500;font-size:16px;font-variant-numeric:tabular-nums}
+.hud .spacer{flex:1}
+
+button{font:inherit;color:inherit;cursor:pointer}
+.btn{background:var(--panel);border:2px solid var(--ink);border-radius:6px;padding:7px 12px;font-weight:700;font-size:13px;box-shadow:0 2px 0 var(--ink);transition:transform .08s}
+.btn:hover{transform:translateY(-1px)} .btn:active{transform:translateY(2px);box-shadow:none}
+.btn:focus-visible,.lot:focus-visible,input:focus-visible{outline:3px solid var(--star);outline-offset:2px}
+.btn.primary{background:var(--sign);color:var(--sign-ink)}
+.btn.go{background:var(--money);color:#fff}
+.btn.ghost{border-color:var(--line);box-shadow:none;font-weight:500;color:var(--muted)}
+.btn[disabled]{opacity:.45;cursor:not-allowed;transform:none}
+.btn small{display:block;font-weight:500;font-family:var(--mono);font-size:11px;opacity:.9}
+
+/* street */
+.street{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px}
+.lot{background:var(--panel);border:2px solid var(--line);border-radius:8px;padding:0;overflow:hidden;text-align:left;display:flex;flex-direction:column}
+.lot .art{aspect-ratio:16/10;display:block;width:100%}
+.lot .info{padding:10px 12px;display:flex;flex-direction:column;gap:2px}
+.lot.cur{border-color:var(--sign);box-shadow:0 3px 0 var(--sign)}
+.lot.locked{opacity:.55} .lot.locked .art{filter:grayscale(1)}
+.stars{color:var(--star);letter-spacing:2px;font-size:15px} .stars i{color:var(--line);font-style:normal}
+
+/* job site */
+.site{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:20px;align-items:start}
+@media (max-width:820px){.site{grid-template-columns:minmax(0,1fr)}}
+.col{display:flex;flex-direction:column;gap:16px;min-width:0}
+.panel{background:var(--panel);border:2px solid var(--line);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.panel.hot{border-color:var(--sign)}
+.picture{border:2px solid var(--ink);border-radius:8px;overflow:hidden;background:var(--sky1)}
+.picture svg{display:block;width:100%;height:auto}
+.kv{display:grid;grid-template-columns:1fr auto;gap:4px 12px}
+.kv span:nth-child(even){font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right}
+.task{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:8px 10px;align-items:center;padding:8px 0;border-top:1px dashed var(--line)}
+.task:first-of-type{border-top:0}
+.task .ico{font-size:20px;text-align:center}
+.task .acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.task.done{opacity:.55} .task.done .nm{text-decoration:line-through}
+@media (max-width:520px){.task{grid-template-columns:28px minmax(0,1fr)} .task .acts{grid-column:1/-1;justify-content:flex-start}}
+.tag{display:inline-block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;padding:1px 6px;border-radius:99px;border:1.5px solid currentColor}
+.opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.opt{background:var(--panel2);border:2px solid var(--line);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.opt .btn{margin-top:auto}
+.offer{background:var(--panel2);border-radius:8px;padding:10px 12px;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
+.offer .who{flex:1;min-width:150px}
+.offer.gone{opacity:.5}
+input[type=range]{width:100%;accent-color:var(--sign)}
+.log{font-size:13px;display:flex;flex-direction:column;gap:5px;max-height:220px;overflow:auto}
+.log div{border-left:3px solid var(--line);padding-left:8px}
+.log div:first-child{border-color:var(--sign)}
+.perks{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+
+/* modal + toast */
+.veil{position:fixed;inset:0;background:rgba(8,14,24,.62);z-index:20;display:flex;align-items:center;justify-content:center;padding:16px}
+.modal{background:var(--panel);border:3px solid var(--ink);border-radius:10px;max-width:520px;width:100%;max-height:90%;overflow:auto;padding:20px;display:flex;flex-direction:column;gap:12px;animation:pop .18s ease-out}
+.modal .big{font-size:44px;line-height:1}
+.modal .row{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+@keyframes pop{from{transform:scale(.94);opacity:.4}}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:99px;font-weight:700;z-index:30;max-width:90%}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+</head>
+<body style="margin:0">
+<div class="hud"><div class="hud-in" id="hud"></div></div>
+<div class="wrap" id="app" style="padding-top:20px"></div>
+<div id="overlay"></div>
+
+<script>
+/* ============ helpers ============ */
+const R=(a,b)=>a+Math.random()*(b-a), RI=(a,b)=>Math.floor(R(a,b+1)), pick=a=>a[RI(0,a.length-1)], chance=p=>Math.random()<p;
+const fmt=n=>(n<0?'-':'')+'$'+Math.abs(Math.round(n)).toLocaleString('en-US');
+const r50=n=>Math.round(n/50)*50, r500=n=>Math.round(n/500)*500;
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+const NH=20;
+
+/* ============ data ============ */
+const TASKS={
+ clean:{n:'Deep clean and haul-out',i:'🧽',c:.012,d:2,r:2.8,k:'r'},
+ gutter:{n:'Gutters and drainage',i:'🌧️',c:.01,d:1,r:2.4,k:'r'},
+ roof:{n:'Patch the roof',i:'🛖',c:.05,d:5,r:2.1,k:'r'},
+ plumb:{n:'Replace leaky plumbing',i:'🚿',c:.04,d:4,r:2.1,k:'r'},
+ elec:{n:'Rewire the electrical',i:'⚡',c:.04,d:4,r:2.0,k:'r',pro:1},
+ win:{n:'Replace broken windows',i:'🪟',c:.03,d:3,r:2.0,k:'r'},
+ floor:{n:'Refinish the floors',i:'🪵',c:.035,d:4,r:2.1,k:'r',req:['found']},
+ found:{n:'Shore up the foundation',i:'🧱',c:.07,d:7,r:1.9,k:'r',pro:1},
+ hvac:{n:'New furnace and AC',i:'❄️',c:.04,d:3,r:1.9,k:'r',pro:1},
+ mold:{n:'Mold remediation',i:'🦠',c:.03,d:4,r:2.2,k:'r'},
+ termite:{n:'Termite treatment',i:'🐜',c:.025,d:3,r:2.2,k:'r'},
+ sewer:{n:'Dig up the collapsed sewer line',i:'🕳️',c:.045,d:4,r:2.0,k:'r',pro:1},
+ asbestos:{n:'Asbestos removal',i:'☣️',c:.04,d:5,r:2.0,k:'r',pro:1},
+ chimney:{n:'Rebuild the crumbling chimney',i:'🧯',c:.02,d:3,r:2.0,k:'r'},
+ siding:{n:'Replace rotten siding',i:'🪚',c:.035,d:4,r:2.0,k:'r'},
+ insul:{n:'Insulate the attic',i:'🧶',c:.025,d:3,r:1.9,k:'r'},
+ septic:{n:'Replace the septic tank',i:'🚽',c:.04,d:4,r:1.9,k:'r',pro:1},
+ garage:{n:'Fix the garage door and slab',i:'🚗',c:.02,d:2,r:1.9,k:'r'},
+ paint:{n:'Fresh paint, inside and out',i:'🎨',c:.015,d:3,r:1.9,k:'u',req:['clean','siding']},
+ land:{n:'Landscaping and curb appeal',i:'🌷',c:.02,d:3,r:1.6,k:'u',req:['sewer','septic']},
+ fence:{n:'Picket fence',i:'🚧',c:.015,d:2,r:1.25,k:'u'},
+ kitchen:{n:'Kitchen remodel',i:'🍳',c:.08,d:8,r:1.45,k:'u',req:['plumb','elec']},
+ bath:{n:'Bathroom remodel',i:'🛁',c:.05,d:6,r:1.4,k:'u',req:['plumb']},
+ stage:{n:'Stage it with furniture',i:'🛋️',c:.01,d:1,r:1.3,k:'u',req:['paint','floor'],note:'+1 buyer at every open house'},
+ deck:{n:'Build a back deck',i:'🪜',c:.04,d:5,r:1.25,k:'u'},
+ smart:{n:'Smart-home package',i:'📱',c:.02,d:2,r:1.15,k:'u',req:['elec']},
+ open:{n:'Knock out walls for open plan',i:'🔨',c:.06,d:6,r:1.3,k:'u',req:['asbestos']},
+ basement:{n:'Finish the basement',i:'🎱',c:.07,d:7,r:1.3,k:'u',req:['mold','found']},
+ sunroom:{n:'Add a sunroom',i:'🌞',c:.05,d:6,r:1.15,k:'u'},
+ skylight:{n:'Cut in skylights',i:'🔆',c:.02,d:2,r:1.25,k:'u',req:['roof']},
+ solar:{n:'Solar panels',i:'🔋',c:.05,d:4,r:1.15,k:'u',req:['roof']},
+ ev:{n:'EV charger',i:'🔌',c:.012,d:1,r:1.15,k:'u',req:['elec']},
+ gym:{n:'Home gym',i:'🏋️',c:.03,d:3,r:1.0,k:'u'},
+ pool:{n:'Dig a swimming pool',i:'🏊',c:.10,d:10,r:.85,k:'u',req:['sewer','septic']},
+ theater:{n:'Home theater',i:'🎬',c:.06,d:5,r:.9,k:'u',req:['elec']},
+ wine:{n:'Wine cellar',i:'🍷',c:.04,d:4,r:.9,k:'u',req:['mold']},
+ sauna:{n:'Sauna',i:'🧖',c:.03,d:3,r:.9,k:'u',req:['elec']},
+ outdoor:{n:'Outdoor kitchen',i:'🍖',c:.05,d:5,r:1.0,k:'u'},
+ guest:{n:'Guest house',i:'🏡',c:.12,d:12,r:1.0,k:'u',req:['sewer','septic']},
+};
+const HOODS={
+ starter:{n:'Starter-home block',loves:['paint','kitchen','fence'],hates:['pool','theater','wine']},
+ family:{n:'Family suburb',loves:['fence','deck','basement'],hates:['theater','wine','sauna']},
+ rural:{n:'Out in the country',loves:['deck','land','solar'],hates:['smart','theater','gym']},
+ retire:{n:'Retirement village',loves:['bath','sunroom','land'],hates:['open','gym','smart']},
+ historic:{n:'Historic district',loves:['paint','land','sunroom','kitchen'],hates:['open','smart','pool']},
+ hip:{n:'Hip downtown',loves:['open','smart','skylight','ev'],hates:['fence','theater','wine']},
+ eco:{n:'Eco enclave',loves:['solar','ev','skylight','land'],hates:['pool','theater']},
+ lux:{n:'Gated estates',loves:['pool','wine','theater','outdoor','guest','sauna'],hates:['fence']},
+};
+const gainC=a=>{S.cash+=a;settle()};
+const rep=x=>{S.rep=clamp(S.rep+x,0,100)};
+const risk=(p,c,msg,rp)=>h_().risks.push({p,c,msg,rp:rp||0});
+const HOUSES=[
+ {name:"The Squatters' Bungalow",emoji:'⛺',price:45000,hue:28,st:1,hood:'starter',
+  r:['clean','win','floor','plumb','gutter'],h:['elec'],u:['paint','land','kitchen','bath','stage','fence'],
+  story:"Three people down on their luck have been living here for a year. They keep the place tidier than the last owner did, but you can't renovate around them.",
+  opts:[
+   {t:'Help them move',d:'Pay first month and a deposit on an apartment across town, plus a moving van.',c:2500,days:3,rep:10,run:()=>"They leave you a thank-you card and the spare key. Word gets around that you're decent."},
+   {t:'Hire them as your crew',d:'They know every creak in this house. Pay a signing bonus and put them to work.',c:1000,days:5,rep:6,run:h=>{h.flags.crew=1;return "Your new crew cuts DIY time on this house by 30%."}},
+   {t:'Call the sheriff',d:'File for a formal eviction. Cheap, slow, and the neighbors will be watching.',c:300,days:12,rep:-12,run:()=>"Twelve days of paperwork later the house is empty. The neighbors do not wave."}]},
+ {name:"Hoarder's Haven",emoji:'📦',price:70000,hue:95,st:1,hood:'family',
+  r:['clean','floor','elec','roof','garage'],h:['termite'],u:['paint','land','kitchen','stage','deck','fence','theater'],
+  story:"Forty years of newspapers, 212 ceramic frogs and a canoe in the dining room. You can't see the floor, let alone fix it.",
+  opts:[
+   {t:'Junk-hauling company',d:'Four trucks, two days, everything gone.',c:3000,days:2,rep:0,run:()=>"Empty. It echoes now."},
+   {t:'Sort it yourself',d:'Nine days in a dust mask. There might be treasure under the frogs.',c:400,days:9,rep:0,run:()=>{if(chance(.6)){const g=r50(R(1500,6000));gainC(g);return "Under the canoe: a crate of antique clocks. A dealer pays you "+fmt(g)+"."}return "Nine days of sorting and the most valuable find was a working stapler."}},
+   {t:'Giant yard sale',d:'Invite the whole neighborhood and let them carry it away for you.',c:200,days:5,rep:3,run:()=>{const g=r50(R(1000,3000));gainC(g);return "The frogs sell out by noon. You pocket "+fmt(g)+" and meet every neighbor."}}]},
+ {name:'Raccoon Ranch',emoji:'🦝',price:95000,hue:200,st:1,hood:'rural',
+  r:['clean','roof','win','elec','insul','chimney'],h:['plumb'],u:['paint','bath','land','stage','smart','deck'],
+  story:"A family of eleven raccoons runs the attic like a nightclub. They have opinions about your arrival.",
+  opts:[
+   {t:'Humane wildlife pro',d:'A specialist relocates the whole family to a forest preserve.',c:4000,days:2,rep:2,run:()=>"All eleven relocated. The specialist sends you a photo of them by a creek."},
+   {t:'DIY traps and marshmallows',d:'Cheap. Slow. They bite.',c:500,days:8,rep:0,run:()=>{if(chance(.35)){force(1200);advance(3);return "One of them got your hand. "+fmt(1200)+" at urgent care and three days on the couch."}return "It took 40 bags of marshmallows, but the attic is yours."}},
+   {t:'Let them stay',d:'List it as "rustic, with wildlife". Costs nothing, fixes nothing.',c:0,days:0,rep:-5,run:h=>{h.chVal=0;h.flags.pests=1;return "The raccoons stay. Buyers will notice, and so will the appraiser."}}]},
+ {name:'The Swamp Thing',emoji:'💧',price:130000,hue:170,st:2,hood:'family',
+  r:['mold','plumb','floor','hvac','gutter'],h:['found','sewer'],u:['paint','kitchen','bath','stage','deck','pool','basement'],
+  story:"The basement holds four feet of standing water and something that might be a new species of mushroom.",
+  opts:[
+   {t:'Remediation team',d:'Industrial pumps, dehumidifiers and people in white suits.',c:7000,days:4,rep:0,run:()=>"Bone dry, with a certificate to prove it."},
+   {t:'Rent pumps and do it yourself',d:'Nine damp days. The water might come back.',c:1500,days:9,rep:0,run:()=>{if(chance(.3)){force(3000);return "A week later the water was back. A second round costs you "+fmt(3000)+"."}return "Dry, and you only lost one boot."}},
+   {t:'Fill it with concrete',d:"No basement, no basement problem. Buyers who wanted a basement won't love it.",c:4000,days:3,rep:0,run:h=>{h.chVal*=.4;delete h.tasks.basement;return "The basement is now a very large paperweight. The house lost some of its value with it."}}]},
+ {name:'HOA from Hell',emoji:'📋',price:180000,hue:340,st:2,hood:'retire',
+  r:['roof','win','hvac','clean','siding'],h:['sewer'],u:['paint','land','kitchen','open','stage','smart','sunroom','fence'],
+  story:"HOA president Brenda has taped 31 violation notices to the door, including one for the shade of the mailbox. No permits until she's satisfied.",
+  opts:[
+   {t:'Pay every fine',d:'Write the check, repaint the mailbox, move on.',c:6000,days:2,rep:0,run:()=>"Brenda accepts your check with visible disappointment."},
+   {t:'Fight it at the HOA meeting',d:'Six days of bylaws research. Win and the fines vanish. Lose and they double.',c:0,days:6,rep:0,run:()=>{if(chance(.5)){rep(8);return "You quote bylaw 14(c) from memory. The room applauds. Fines dismissed, and you're a local hero."}force(12000);return "Brenda had bylaw 14(d). Fines doubled to "+fmt(12000)+"."}},
+   {t:'Charm Brenda',d:'A gift basket, a compliment about her hydrangeas and a prayer.',c:1500,days:3,rep:0,run:()=>{if(chance(.7))return "Brenda now calls you 'that nice young flipper'. All 31 notices are withdrawn.";force(6000);rep(-5);return "Brenda is allergic to the basket. You pay the "+fmt(6000)+" in fines anyway."}}]},
+ {name:'The Crispy Colonial',emoji:'🔥',price:250000,hue:12,st:2,hood:'historic',
+  r:['roof','elec','floor','win','clean','chimney'],h:['plumb','mold','asbestos'],u:['paint','kitchen','bath','stage','land','open','smart'],
+  story:"A kitchen fire took out a third of the house. The rest smells like a campfire that holds a grudge.",
+  opts:[
+   {t:'Restoration company',d:'Pros strip the char, seal the smoke and rebuild the framing.',c:16000,days:6,rep:0,run:()=>"You can't even smell it any more."},
+   {t:'Gut it yourself',d:'Fifteen days of crowbars and soot.',c:5000,days:15,rep:0,run:h=>{h.fat+=2;return "You'll be coughing black for a week, and you're worn out before the real work starts."}},
+   {t:"Chase the old owner's insurance",d:'Ten days on hold. If the claim lands, the cleanup is free. If not, you pay full price.',c:0,days:10,rep:0,run:()=>{if(chance(.6))return "Claim approved. The insurer pays for the whole restoration.";force(16000);return "Claim denied on page 47, subsection 9. The restoration costs you "+fmt(16000)+"."}}]},
+ {name:'The Sinking Feeling',emoji:'🕳️',price:340000,hue:48,st:2,hood:'family',
+  r:['found','plumb','floor','hvac','garage'],h:['sewer','termite'],u:['paint','land','kitchen','bath','stage','deck','theater','basement'],
+  story:"A sinkhole opened in the back yard last spring and has already eaten a trampoline and a gas grill.",
+  opts:[
+   {t:'Structural engineers',d:'Grout injection and steel piers. The permanent fix.',c:28000,days:8,rep:0,run:()=>"Stamped, certified and solid."},
+   {t:'Fill it with gravel',d:'Fast and cheap. It may not stay filled.',c:6000,days:3,rep:0,run:()=>{risk(.4,r500(340000*.09),'The sinkhole reopened during the walkthrough');return "It looks fine. Try not to think about it."}},
+   {t:'Turn it into a koi pond',d:'Line it, fill it, stock it. A water feature buyers will talk about.',c:12000,days:6,rep:5,run:h=>{h.chVal*=1.3;return "Fourteen koi, one waterfall. The listing photos are going to be great."}}]},
+ {name:"Dr. Voltar's Lab",emoji:'🧪',price:460000,hue:265,st:3,hood:'hip',
+  r:['elec','plumb','hvac','win','clean','asbestos'],h:['mold','found'],u:['paint','kitchen','bath','smart','stage','pool','skylight','ev','open'],
+  story:"The late Dr. Voltar left a basement full of humming machines, unlabeled jars and a lever marked DO NOT.",
+  opts:[
+   {t:'Hazmat team',d:'Everything sealed, tagged and removed by professionals.',c:35000,days:5,rep:0,run:()=>"The team would not tell you what was in jar 12."},
+   {t:'Donate it to the university',d:"The physics department hauls the equipment and pays a finder's fee. You cover the cleanup.",c:8000,days:8,rep:4,run:()=>{gainC(10000);return "The university pays you "+fmt(10000)+" and names a broom closet after you."}},
+   {t:'DIY in a rain poncho',d:'How dangerous can it be?',c:4000,days:10,rep:0,run:()=>{if(chance(.4)){force(20000);rep(-5);return "You pulled the lever. The hospital bill is "+fmt(20000)+" and your eyebrows will grow back."}return "You did not pull the lever. Everything is in the dumpster."}}]},
+ {name:"The Don's Villa",emoji:'💰',price:620000,hue:5,st:3,hood:'lux',
+  r:['roof','floor','plumb','elec','clean','siding'],h:['sewer','hvac'],u:['paint','kitchen','bath','land','stage','pool','theater','wine','smart'],
+  story:"Behind the wine cellar wall: a duffel bag of cash. Out front: a black sedan that has been parked there since you got the keys.",
+  opts:[
+   {t:'Hand it to the police',d:'Six days of statements. There is a reward.',c:0,days:6,rep:15,run:()=>{gainC(5000);return "The detective shakes your hand. "+fmt(5000)+" reward, and the sedan drives away."}},
+   {t:'Keep the cash',d:'Sixty thousand dollars, right now. Someone may want it back.',c:0,days:1,rep:0,run:()=>{gainC(60000);risk(.5,90000,'Two men in suits collect "what\'s owed, plus interest"',-10);return "You are "+fmt(60000)+" richer. The sedan is still out front."}},
+   {t:'Return it to the family',d:'Knock on the sedan window and hand it over, respectfully.',c:0,days:2,rep:0,run:h=>{h.flags.proDisc=1;return "\"You're a stand-up person,\" says the driver. Some guys show up to help. Pro work on this house is 20% cheaper."}}]},
+ {name:'Ravenscroft Manor',emoji:'👻',price:850000,hue:250,st:3,night:1,tower:1,hood:'historic',
+  r:['roof','found','elec','plumb','win','floor','clean','chimney'],h:['mold','termite','sewer'],u:['paint','kitchen','bath','land','stage','pool','theater','smart','sunroom'],
+  story:"Lady Ravenscroft died here in 1887 and never moved out. Contractors last an average of eleven minutes. The chandelier swings on its own.",
+  opts:[
+   {t:'Call an exorcist',d:'Father Okafor has a 65% success rate and a strict no-refund policy.',c:40000,days:3,rep:0,run:()=>{if(chance(.65))return "A cold wind, a slammed door, then silence. She's gone.";force(20000);advance(4);return "The first attempt only made her angry. A second visit costs "+fmt(20000)+" and four more days, but it works."}},
+   {t:'Hire a medium to negotiate',d:"Find out what she wants. It takes time, but she may come around.",c:12000,days:10,rep:8,run:h=>{h.flags.blessed=1;return "She wanted her portrait rehung in the hall. Done. Lady Ravenscroft now approves of you, and buyers feel oddly welcome here."}},
+   {t:'Market it as haunted',d:'A genuine haunting has collectors. Ordinary buyers will run.',c:5000,days:2,rep:0,run:h=>{h.chVal*=.5;h.flags.haunt=1;return "The listing reads: AUTHENTICALLY HAUNTED. Ordinary buyers will pay less, but a certain kind of collector will pay a lot more."}}]},
+ {name:'The Hive',emoji:'🐝',price:1100000,hue:44,st:2,wide:1,hood:'eco',
+  r:['clean','siding','elec','insul','roof','floor'],h:['mold','termite'],u:['paint','land','kitchen','bath','stage','solar','ev','pool','skylight'],
+  story:"Two million bees live inside the walls. Honey drips out of the light fixtures and the whole house hums in B flat.",
+  opts:[
+   {t:'Bring in a beekeeper',d:'A slow, gentle relocation, hive by hive. You keep the honey.',c:30000,days:6,rep:6,run:()=>{gainC(8000);return "Forty hives rehomed to an orchard. The honey sells for "+fmt(8000)+" at the farmers market."}},
+   {t:'Call the exterminator',d:'Fast and cheap. This is an eco enclave, and people will have feelings.',c:18000,days:2,rep:-12,run:()=>"The humming stops. Someone leaves a hand-painted protest sign on your lawn."},
+   {t:'Keep one hive as a feature',d:'"Comes with artisanal apiary." Charming, until somebody gets stung.',c:14000,days:4,rep:3,run:h=>{h.chVal*=1.25;risk(.35,30000,"The buyer's kid got stung at the final walkthrough");return "One tidy hive by the garden gate. The listing writes itself."}}]},
+ {name:'The Doomsday Bunker',emoji:'☢️',price:1400000,hue:110,st:2,wide:1,hood:'rural',
+  r:['septic','elec','hvac','found','clean','garage','roof'],h:['asbestos','plumb'],u:['paint','kitchen','bath','stage','land','deck','basement','smart','gym'],
+  story:"The previous owner sealed himself in the bunker in 2012 to wait out the end of the world. He is still down there, with 9,000 cans of beans and a tripwire on the stairs.",
+  opts:[
+   {t:'Send a negotiator',d:'A patient social worker with a newspaper and a thermos.',c:25000,days:7,rep:8,run:()=>"He comes up blinking, asks who won the 2012 election, and moves in with his sister."},
+   {t:'Wait for the beans to run out',d:'It costs nothing but time. A lot of time.',c:0,days:22,rep:0,run:()=>"On day 22 the hatch opens. He wants a pizza."},
+   {t:'Buy him out, keep the bunker',d:'Pay him to leave everything and sell the bunker as a luxury panic room.',c:60000,days:2,rep:0,run:h=>{h.chVal*=1.4;return "He takes the check and one can of beans. The panic room goes at the top of the listing."}}]},
+ {name:'Still Rolling',emoji:'🎬',price:1800000,hue:310,st:3,hood:'hip',
+  r:['floor','win','elec','plumb','clean','hvac'],h:['mold','sewer','asbestos'],u:['paint','kitchen','bath','stage','open','smart','skylight','theater','ev','fence'],
+  story:"A film crew is shooting a low-budget horror movie in the living room. Their lease runs until the director says it's a wrap, and he is a perfectionist.",
+  opts:[
+   {t:'Buy out the lease',d:'Write a check and they pack up the fog machine.',c:45000,days:2,rep:0,run:()=>"They leave behind forty litres of fake blood. It does not come out of grout."},
+   {t:'Let them finish',d:'They pay a location fee while you wait. And wait.',c:0,days:18,rep:0,run:()=>{gainC(20000);if(chance(.5)){rep(10);return "They paid "+fmt(20000)+", and the film became a cult hit. People take selfies out front. Reputation +10."}return "They paid "+fmt(20000)+" in location fees. The film went straight to nowhere."}},
+   {t:'Invest in the movie',d:'Fund the last week of shooting to speed things up. You get points on the back end.',c:30000,days:8,rep:0,run:()=>{if(chance(.4)){gainC(120000);return "It sold at a festival. Your share comes to "+fmt(120000)+"."}return "It did not sell at the festival. You own 3% of nothing."}}]},
+ {name:'Cliffhanger Cottage',emoji:'🌊',price:2300000,hue:195,st:2,wide:1,hood:'retire',
+  r:['found','roof','siding','win','gutter','plumb','floor'],h:['mold','septic'],u:['paint','kitchen','bath','stage','land','sunroom','deck','gym','open'],
+  story:"The cliff has been retreating a foot a year. The back porch now hangs over the sea, and the porch swing is technically offshore.",
+  opts:[
+   {t:'Build a sea wall',d:'Piles, rock armor and a marine engineer.',c:140000,days:12,rep:0,run:()=>"The cliff isn't going anywhere for a century."},
+   {t:'Move the house back',d:'Jack it up and roll it forty feet inland. Slow, but people will come to watch.',c:90000,days:20,rep:5,run:()=>"The whole town turned out to watch a house drive across a lawn."},
+   {t:'Sandbags and optimism',d:'It only has to hold until closing.',c:15000,days:3,rep:0,run:()=>{risk(.45,210000,'A chunk of cliff fell off during the walkthrough');return "The sandbags look reassuring from most angles."}}]},
+ {name:'Alien Acres',emoji:'🛸',price:3000000,hue:140,st:2,wide:1,hood:'rural',
+  r:['roof','septic','elec','insul','clean','siding','chimney'],h:['termite','found','plumb'],u:['paint','kitchen','bath','stage','land','deck','solar','theater','fence','basement'],
+  story:"Crop circles appeared in the back field, and forty believers have camped on the lawn to wait for the mothership. They are very polite and they are not leaving.",
+  opts:[
+   {t:'Stage a departure',d:'Two hundred drones, a fog machine and a moving farewell.',c:35000,days:4,rep:5,run:()=>"The 'mothership' rose over the barn at midnight. They wept, they waved, they went home."},
+   {t:'Sell tickets',d:'If they want to stay, the tourists can pay. The neighbors will hate the traffic.',c:0,days:12,rep:-6,run:()=>{gainC(50000);return "Twelve days of parking fees and alien-head lollipops bring in "+fmt(50000)+". Then the believers get bored and leave."}},
+   {t:'Call the county',d:'Trespass orders, hearings, appeals.',c:5000,days:16,rep:-10,run:()=>"The county clears the lawn. The local paper runs the headline 'Flipper Evicts Stargazers'."}]},
+ {name:'Cat Castle',emoji:'🐈',price:3800000,hue:330,st:3,wide:1,hood:'retire',
+  r:['clean','floor','hvac','plumb','win','siding','mold'],h:['asbestos','sewer','elec'],u:['paint','kitchen','bath','stage','land','sunroom','sauna','open','smart'],
+  story:"The late owner left the house to her 73 cats. Legally they hold a life tenancy, and they have shredded everything below knee height.",
+  opts:[
+   {t:'Hold an adoption fair',d:'Find 73 good homes. It takes a while, and everyone will love you for it.',c:20000,days:10,rep:12,run:()=>"Seventy-two adopted. The seventy-third, a one-eyed tabby called Admiral, now rides in your truck."},
+   {t:'Fund a luxury sanctuary',d:'Pay a rescue to take all of them tomorrow.',c:80000,days:3,rep:4,run:()=>"A fleet of vans arrives. The cats leave like departing royalty."},
+   {t:'Contest the will',d:'Your lawyer thinks cats cannot hold property. The judge may like cats.',c:30000,days:14,rep:-4,run:()=>{if(chance(.55))return "The judge rules that cats are not persons. They are rehomed by the court.";force(80000);return "The judge has four cats. You lose, and pay "+fmt(80000)+" for the sanctuary anyway."}}]},
+ {name:'The Leaning Loft',emoji:'📐',price:4800000,hue:22,st:3,hood:'hip',
+  r:['found','elec','plumb','win','floor','hvac','roof'],h:['asbestos','mold','sewer'],u:['paint','kitchen','bath','stage','open','smart','skylight','ev','gym','wine'],
+  story:"The building leans six degrees to the east. Marbles roll, doors swing open on their own, and the top-floor tenant sleeps strapped in.",
+  opts:[
+   {t:'Hydraulic straightening',d:'Jacks under every column, a millimeter a day.',c:300000,days:14,rep:0,run:()=>"A marble placed on the floor stays exactly where you put it."},
+   {t:'Stabilize it and sell the lean',d:'Stop it getting worse, then market it as an architectural landmark.',c:120000,days:6,rep:5,run:h=>{h.chVal*=.7;return "It leans, but it will lean forever. Tour buses have started to slow down outside."}},
+   {t:'Counterweights in the basement',d:'Eighty tons of scrap iron on the high side. What could go wrong.',c:40000,days:4,rep:0,run:()=>{risk(.45,400000,"The buyer's engineer found eighty tons of scrap iron in the basement");return "It looks straighter if you tilt your head."}}]},
+ {name:'Mount Regret',emoji:'🌋',price:6000000,hue:8,st:3,wide:1,hood:'lux',
+  r:['roof','hvac','plumb','elec','floor','clean','siding','chimney'],h:['found','mold','septic'],u:['paint','kitchen','bath','stage','land','pool','wine','outdoor','sauna','guest','theater'],
+  story:"The brochure said 'dormant volcano views'. A steaming geothermal vent has since opened in the wine cellar and the Merlot is at a rolling boil.",
+  opts:[
+   {t:'Geologists cap the vent',d:'Drill, grout, monitor. Expensive and boring, which is what you want from a volcano.',c:380000,days:10,rep:0,run:()=>"Capped, with sensors that text you if anything changes."},
+   {t:'Build a geothermal spa',d:'Lean in. Natural hot springs under the house are a selling point.',c:520000,days:16,rep:6,run:h=>{h.chVal*=1.8;return "Free heat forever and a grotto pool. The appraiser asks if she can come back on the weekend."}},
+   {t:'Scented candles',d:'Sulfur is basically a spa smell.',c:5000,days:1,rep:0,run:h=>{h.chVal=0;risk(.5,600000,'The vent erupted through the dining room during the walkthrough');return "It smells like lavender and eggs."}}]},
+ {name:"Count Orlok's Penthouse",emoji:'🧛',price:7500000,hue:285,st:3,night:1,hood:'lux',
+  r:['win','elec','plumb','floor','clean','hvac','mold'],h:['asbestos','termite','sewer'],u:['paint','kitchen','bath','stage','smart','wine','theater','sauna','gym','skylight','solar'],
+  story:"The previous owner still sleeps in a coffin in the master closet. He only comes out at night, mostly to complain about the hammering.",
+  opts:[
+   {t:'Relocate him in style',d:'A crypt in the old country, first-class freight, soil from the homeland included.',c:250000,days:5,rep:0,run:()=>"He sends a postcard. The handwriting is exquisite."},
+   {t:'Work around his schedule',d:"Free, but no power tools before dusk or after dawn. Every job takes longer.",c:0,days:1,rep:0,run:h=>{h.flags.slow=1;return "He agrees to tolerate you. Every job on this house takes 2 extra days."}},
+   {t:'Take him on as a silent partner',d:'He has centuries of savings and wants a cut of the sale.',c:0,days:2,rep:0,run:h=>{gainC(400000);h.flags.cut=1;return "He hands over "+fmt(400000)+" in gold coins toward the renovation. He takes 15% of the sale price."}}]},
+ {name:'Castle Grimstone',emoji:'🏰',price:10000000,hue:215,st:3,wide:1,night:1,tower:1,hood:'historic',
+  r:['roof','found','elec','plumb','win','floor','clean','chimney','siding','mold'],h:['sewer','termite','asbestos','septic'],u:['paint','kitchen','bath','stage','land','pool','wine','guest','outdoor','theater','sunroom'],
+  story:"A ghost army drills in the great hall every midnight, something large lives in the moat, and the throne is cursed. The listing called it 'full of character'.",
+  opts:[
+   {t:'The full ritual',d:'Seven specialists, one very long night. It works 70% of the time.',c:900000,days:10,rep:0,run:()=>{if(chance(.7))return "At dawn the hall is empty and the moat is still. Whatever lived in it has left a forwarding address.";force(400000);advance(6);return "The ghost army won the first round. A second ritual costs "+fmt(400000)+" and six more days."}},
+   {t:'Host a banquet for the dead',d:'Three weeks of feasting to honor the garrison. Slow, and they will respect you for it.',c:300000,days:20,rep:10,run:h=>{h.flags.blessed=1;return "The captain of the ghost army salutes you and stands the garrison down. The castle feels oddly welcoming."}},
+   {t:'Open it as an attraction first',d:'Sell tickets for a month, then sell the castle as genuinely haunted.',c:150000,days:25,rep:4,run:h=>{const g=r500(R(300000,900000));gainC(g);h.chVal*=.5;h.flags.haunt=1;return "Ticket sales bring in "+fmt(g)+". Ordinary buyers are now terrified of the place, but collectors are circling."}}]},
+];
+const PERKS={
+ tools:{n:'Pro tool set',i:'🧰',c:4000,d:'Your DIY work goes 30% faster.'},
+ truck:{n:'Old pickup truck',i:'🛻',c:5000,d:'Clean-outs, gutters and landscaping cost half.'},
+ insp:{n:"Inspector's license",i:'🔍',c:6000,d:'Inspections are free, instant and never miss anything.'},
+ stage:{n:'Staging warehouse',i:'🪑',c:8000,d:'One extra buyer at every open house.'},
+ buddy:{n:'Contractor on speed dial',i:'📞',c:9000,d:'Hired pros cost 12% less.'},
+ refi:{n:'Friendly banker',i:'🏦',c:10000,d:'Loan interest is cut in half.'},
+ ins:{n:'Umbrella insurance',i:'☂️',c:12000,d:'Bad luck on the job site costs half as much.'},
+ lic:{n:'Realtor license',i:'🪪',c:15000,d:'Selling fee drops from 6% to 3%.'},
+ class:{n:'Night-school carpentry',i:'🎓',c:18000,d:'Your DIY botch risk drops by 8 points.'},
+ coffee:{n:'Espresso machine',i:'☕',c:25000,d:'You tire half as fast doing DIY.'},
+ broker:{n:'Mortgage broker friend',i:'🤝',c:30000,d:"Your buyers' financing never falls through."},
+ lawyer:{n:'Lawyer on retainer',i:'⚖️',c:40000,d:'Lowball offers on houses succeed far more often.'},
+ hat:{n:'Lucky hard hat',i:'⛑️',c:50000,d:'Surprise problems no longer cost emergency rates.'},
+ drone:{n:'Drone photographer',i:'🚁',c:70000,d:'Stunning listings: buyers pay 3% more.'},
+ elecl:{n:"Electrician's license",i:'🔧',c:90000,d:'You can DIY the licensed jobs.'},
+ gen:{n:'Tarps and a generator',i:'⛺',c:120000,d:'Storms and no-shows never delay you.'},
+ crew2:{n:'Second crew',i:'👷',c:150000,d:'Hired pros finish 25% faster.'},
+ bulk:{n:'Bulk supplier account',i:'🏗️',c:200000,d:'DIY materials cost 20% less.'},
+ credit:{n:'Private banking',i:'💳',c:300000,d:'25% more credit and 15 extra days on every loan.'},
+};
+const BUYERS=[
+ {t:'Bargain hunter',i:'🧐',m:.9},{t:'Young family',i:'👨‍👩‍👧',m:1.0,likes:'land',why:'Loves the garden.'},{t:'Investor',i:'💼',m:.93,asis:1,cash:1},
+ {t:'Tech worker',i:'💻',m:1.05,likes:'smart',why:'Loves the smart-home gear.'},{t:'Retired couple',i:'👵',m:1.0,likes:'deck',why:'Loves the deck.'},
+ {t:'Influencer',i:'🤳',m:1.02,likes:'stage',why:'Loves how it photographs.'},{t:'Home chef',i:'👩‍🍳',m:.99,likes:'kitchen',why:'Loves the kitchen.'},
+ {t:'First-time buyer',i:'🔑',m:.96,likes:'paint',why:'Loves the fresh paint.'},{t:'Surgeon',i:'🩺',m:1.06,likes:'bath',why:'Loves the bathroom.'},
+ {t:'Car collector',i:'🏎️',m:1.0,likes:'garage',why:'Loves the garage.'},{t:'Marathon runner',i:'🏃',m:.99,likes:'gym',why:'Loves the gym.'},
+ {t:'Solar evangelist',i:'☀️',m:.99,likes:'solar',why:'Loves the solar panels.'},{t:'Wine snob',i:'🍷',m:1.02,likes:'wine',why:'Loves the cellar.'},
+ {t:'Painter',i:'🖼️',m:.97,likes:'skylight',why:'Loves the light.'},{t:'Penny-pincher',i:'🪙',m:.87,cash:1},
+];
+const GOTH={t:'Occult collector',i:'🦇',m:1.3,goth:1,cash:1};
+const NAMES=['Priya','Marcus','Yuki','Dolores','Kwame','Ingrid','Tomás','Farah','Gus','Mei','Olu','Beatrix','Dmitri','Lupe','Winston','Noor','Astrid','Reggie','Soo-jin','Carmela'];
+const OPENS={
+ basic:{n:'Hold an open house',days:3,c:0,x:0,b:0},
+ ads:{n:'Advertised weekend',days:3,c:.004,x:1,b:0},
+ gala:{n:'Broker gala',days:4,c:.012,x:2,b:.03},
+};
+const SEASONS=[['🌸 Spring',1.04],['☀️ Summer',1.01],['🍂 Autumn',.99],['❄️ Winter',.95]];
+
+const DILEMMAS=[
+ {id:'permit',big:'📝',title:'Skip the permit?',text:()=>`Your contractor leans in: "We could skip the permit on the next job. Saves you ${fmt(r50(P()*.012))}. Probably nobody checks."`,
+  opts:[{l:'Skip it',f:()=>{gainC(r50(P()*.012));risk(.35,r50(P()*.04),'The city found unpermitted work');return 'Money back in your pocket. Probably nobody checks.'}},
+        {l:'Do it by the book',f:()=>{rep(2);return 'The contractor shrugs. The building inspector, who drinks at the same bar, hears about it. Reputation +2.'}}]},
+ {id:'tv',big:'📺',title:'Lights, camera',text:()=>'A local TV station wants to film a segment about the renovation. It means four days of standing around while they reshoot you opening a door.',
+  opts:[{l:'Let them film',f:()=>{advance(4);rep(9);return 'You lost four days and gained a catchphrase. Reputation +9.'}},{l:'No time',f:()=>'They film the house across the street instead.'}]},
+ {id:'kittens',big:'🐱',title:'Tenants in the crawlspace',text:()=>'The crew found a stray cat with five kittens under the floor. Work on that side of the house has to stop until they are out.',
+  opts:[{l:'Find them homes',f:()=>{advance(2);rep(5);return 'Two days of phone calls and all six have homes. Reputation +5.'}},{l:'Shoo them out',f:()=>{rep(-4);return 'A neighbor filmed it. Reputation -4.'}}]},
+ {id:'early',big:'🚙',title:'Drive-by offer',text:h=>{h.tmp=r500(estimate()*.9);return `A man in a rental car rolls down his window: "I'll give you ${fmt(h.tmp)} for it. Cash, today, exactly as it sits."`},
+  opts:[{l:'Take the cash',f:()=>{sell(h_().tmp,{i:'🚙',name:'Dale',type:'drive-by cash buyer',asis:1,cash:1});return null}},{l:'Not for sale yet',f:()=>'He shrugs and drives off.'}]},
+ {id:'fence',big:'📏',title:'Property line',text:()=>`The neighbor says your garage sits eleven inches on his land. A survey costs ${fmt(r50(P()*.008))}. Ignoring him costs nothing, for now.`,
+  opts:[{l:'Pay for the survey',f:()=>{force(r50(P()*.008));return 'The survey says the garage is fine, and that his shed is on your land. He goes quiet.'}},{l:'Ignore him',f:()=>{risk(.4,r50(P()*.03),'The neighbor filed a boundary claim before closing');return 'He glares at you over the hedge.'}}]},
+ {id:'truck',big:'🚚',title:'Fell off a truck',text:()=>`A man in the parking lot of the hardware store has "a whole kitchen's worth of Italian marble" for ${fmt(r50(P()*.012))}. Cash only.`,
+  opts:[{l:'Buy it',f:()=>{force(r50(P()*.012));if(chance(.55)){h_().bonus+=r50(P()*.04);return 'It is real Carrara marble. The house just went up about '+fmt(r50(P()*.04))+' in value.'}return 'It is painted plywood. He has left the parking lot.'}},{l:'Walk away',f:()=>'You buy your caulk and go.'}]},
+ {id:'injury',big:'🩹',title:'Accident on site',text:()=>`One of the crew fell off a ladder and broke a wrist. The medical bills come to ${fmt(r50(P()*.01))}. Your insurance says it isn't technically your problem.`,
+  opts:[{l:'Pay the bills',f:()=>{force(r50(P()*.01));rep(6);return 'The crew notices. So does everyone they know. Reputation +6.'}},{l:'Let the lawyers sort it out',f:()=>{rep(-7);if(chance(.35)){force(r50(P()*.025));return 'They sued, and won '+fmt(r50(P()*.025))+'. Reputation -7.'}return 'It goes away. The crew is quieter now. Reputation -7.'}}]},
+ {id:'weekend',big:'⏱️',title:'Weekend shifts',text:()=>`The crew offers to work weekends for the rest of the job. It costs ${fmt(r50(P()*.01))} in overtime and buys you a week on the loan deadline.`,
+  opts:[{l:'Pay the overtime',f:()=>{force(r50(P()*.01));h_().term+=7;return 'The deadline moves back 7 days.'}},{l:'Keep normal hours',f:()=>'Monday to Friday it is.'}]},
+ {id:'glass',big:'🪞',title:'Behind the drywall',text:()=>`Hidden behind a wall: an original stained-glass window from when the house was built. Restoring it costs ${fmt(r50(P()*.012))} and four days. A salvage dealer would pay ${fmt(r50(P()*.01))} for it today.`,
+  opts:[{l:'Restore it',f:()=>{force(r50(P()*.012));advance(4);h_().bonus+=r50(P()*.04);rep(3);return 'The afternoon light through it is ridiculous. Value up about '+fmt(r50(P()*.04))+', reputation +3.'}},{l:'Sell it',f:()=>{gainC(r50(P()*.01));return 'The dealer wraps it in a blanket and hands you '+fmt(r50(P()*.01))+'.'}}]},
+ {id:'bank',big:'🏦',title:'A call from the bank',text:()=>`Your loan officer offers to extend the deadline by 15 days for a fee of ${fmt(r50(P()*.012))}.`,
+  opts:[{l:'Extend the loan',f:()=>{force(r50(P()*.012));h_().term+=15;return 'You have 15 more days before penalty rates start.'}},{l:'No thanks',f:()=>'"Suit yourself," says the loan officer.'}]},
+ {id:'gas',big:'💨',title:'What is that smell?',text:()=>'The kitchen smells faintly of gas. The utility can send someone in two days. Until then nobody should be working inside.',
+  opts:[{l:'Wait for the utility',f:()=>{advance(2);return 'A loose fitting behind the stove. Fixed in ten minutes, after two days of waiting.'}},{l:'Open a window and keep working',f:()=>{if(chance(.2)){const c=r50(P()*.06);force(c);rep(-5);return 'The explosion took out the kitchen wall. Nobody was hurt, but it costs '+fmt(c)+' to rebuild. Reputation -5.'}return 'The smell fades by lunchtime. Probably fine.'}}]},
+ {id:'capsule',big:'📦',title:'Time capsule',text:()=>'Digging in the yard, the crew hit a sealed steel box from 1924: letters, photographs and a handful of gold coins.',
+  opts:[{l:'Give it to the town museum',f:()=>{rep(7);return 'The museum builds an exhibit around it and puts your name on the plaque. Reputation +7.'}},{l:'Sell the coins',f:()=>{const g=r50(P()*.012);gainC(g);return 'A coin dealer pays '+fmt(g)+'.'}}]},
+ {id:'cousin',big:'🧑‍🔧',title:"The foreman's cousin",text:()=>`Your foreman's cousin will do the next pro job on this house at half price. He has "done loads of these".`,
+  opts:[{l:'Give him a shot',f:()=>{if(chance(.6)){h_().flags.half=1;return 'He seems competent. Your next hired job on this house is half price.'}advance(3);force(r50(P()*.008));return 'He flooded the hallway. Three days and '+fmt(r50(P()*.008))+' to dry it out.'}},{l:'Stick with the regular crew',f:()=>'The foreman looks slightly relieved.'}]},
+ {id:'mag',big:'📰',title:'Magazine feature',text:()=>`A home magazine will feature the house if you pay ${fmt(r50(P()*.008))} for a professional shoot.`,
+  opts:[{l:'Book the shoot',f:()=>{force(r50(P()*.008));h_().flags.press=1;return 'Four glossy pages. Every open house for this property draws one more buyer.'}},{l:'Pass',f:()=>'They feature a yurt instead.'}]},
+];
+
+/* ============ state ============ */
+let S, modal=null, toastMsg=null, toastT=null, H=[];
+const KEY='flipstreet.v2';
+function newGame(){S={cash:25000,debt:0,rep:50,day:1,market:1,lvl:0,stars:[],profits:[],perks:{},house:null,screen:'map',intro:1,snap:null,bail:0,bust:0,deal:null,pr:0}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+function load(){try{const s=JSON.parse(localStorage.getItem(KEY));if(s&&typeof s.cash==='number'){S=s;return}}catch(e){}newGame()}
+const h_=()=>S.house, def=()=>HOUSES[S.house.lvl], P=()=>def().price, hood=()=>HOODS[def().hood];
+const limit=()=>Math.round((S.house?P():HOUSES[Math.min(S.lvl,NH-1)].price)*1.3*(S.perks.credit?1.25:1));
+const net=()=>S.cash-S.debt;
+function settle(){if(S.cash<0){S.debt-=S.cash;S.cash=0}if(S.cash>0&&S.debt>0){const x=Math.min(S.cash,S.debt);S.cash-=x;S.debt-=x}}
+const canPay=a=>S.cash+Math.max(0,limit()-S.debt)>=a;
+function pay(a){if(!canPay(a)){toast("You can't afford that. Your loan is maxed out.");return false}S.cash-=a;settle();return true}
+function force(a){S.cash-=a;settle()}
+function log(m){const h=h_();if(!h)return;h.log.unshift('Day '+S.day+': '+m);h.log.length=Math.min(h.log.length,30)}
+const season=()=>SEASONS[Math.floor(((S.day-1)%120)/30)];
+
+/* ============ economics ============ */
+const baseCost=id=>r50(P()*TASKS[id].c);
+function roi(id){const hd=hood();let r=TASKS[id].r;if(hd.loves.includes(id))r*=1.4;if(hd.hates.includes(id))r*=.55;return r*(1-.009*h_().lvl)}
+const taskGuess=id=>r50(baseCost(id)*roi(id));
+const taskVal=id=>baseCost(id)*roi(id)*h_().tasks[id].q;
+function proCost(id){const h=h_();return r50(baseCost(id)*(S.perks.buddy?.88:1)*(h.flags.proDisc?.8:1)*(h.flags.half?.5:1)*(h.tasks[id].emerg&&!S.perks.hat?1.25:1)*(S.perks.truck&&['clean','gutter','land'].includes(id)?.5:1))}
+function diyCost(id){const h=h_();return r50(baseCost(id)*.5*(S.perks.bulk?.8:1)*(h.tasks[id].emerg&&!S.perks.hat?1.25:1)*(S.perks.truck&&['clean','gutter','land'].includes(id)?.5:1))}
+const proDays=id=>Math.ceil(TASKS[id].d*(S.perks.crew2?.75:1))+(h_().flags.slow?2:0);
+function diyDays(id){const h=h_();return Math.max(1,Math.ceil(TASKS[id].d*2*(S.perks.tools?.7:1)*(h.flags.crew?.7:1)))+(h.flags.slow?2:0)}
+const canDIY=id=>!TASKS[id].pro||S.perks.elecl;
+const botchP=()=>clamp(.12+.06*h_().fat*(S.perks.coffee?.5:1)-(S.perks.class?.08:0),.03,.75);
+const blockers=id=>{const h=h_();return (TASKS[id].req||[]).filter(r=>h.tasks[r]&&h.tasks[r].known&&!h.tasks[r].done)};
+function value(){const h=h_();let v=.95*P()+h.chVal+h.bonus;for(const id in h.tasks)if(h.tasks[id].done)v+=taskVal(id);return v}
+const openRepairs=()=>{const h=h_();return Object.keys(h.tasks).filter(id=>TASKS[id].k==='r'&&h.tasks[id].known&&!h.tasks[id].done)};
+const estimate=()=>r500(value()*S.market*season()[1]*(1-.03*openRepairs().length));
+const progress=()=>{const h=h_();const ids=Object.keys(h.tasks);return (ids.filter(i=>h.tasks[i].done).length+(h.chDone?2:0))/(ids.length+2)};
+const feeRate=()=>S.perks.lic?.03:.06;
+const overdue=()=>h_().days>=h_().term;
+const holdPerDay=()=>P()*.001*(overdue()?3:1);
+const intPerDay=()=>S.debt*.0006*(S.perks.refi?.5:1)*(overdue()?3:1);
+function advance(n){
+  const h=h_();if(n<=0||!h)return;
+  for(let i=0;i<n;i++){const c=holdPerDay()+intPerDay();force(c);h.holding+=c;h.days++;S.day++}
+  S.market=clamp(S.market+R(-.014,.014)*Math.sqrt(n)+(1-S.market)*.05,.85,1.15);
+  h.offers=[];
+  if(S.debt>limit()*1.08)h.foreclosed=1;
+}
+function checkForeclose(){
+  if(!h_()||!h_().foreclosed)return false;
+  modal={big:'🏦',title:'The bank took the house',html:'<p>Your loan ran past its limit and the bank foreclosed. A sympathetic loan officer lets you start this house over, but people heard about it.</p>',
+    btns:[{l:'Start this house again',f:()=>{const r=S.rep;S=JSON.parse(S.snap);S.rep=clamp(r-6,0,100);modal=null}}]};
+  return true;
+}
+
+/* ============ level flow ============ */
+function dealPrice(){const d=HOUSES[S.lvl];return r500(d.price*(S.deal&&S.deal.lvl===S.lvl?S.deal.m:1))}
+function lowball(){
+  const p=clamp(.42+(S.perks.lawyer?.28:0)+(S.rep-50)/300,.1,.92);
+  if(chance(p)){S.deal={lvl:S.lvl,m:.92,done:1};toast('The seller blinked. Price cut 8%.')}
+  else{S.deal={lvl:S.lvl,m:1.05,done:1};rep(-1);toast('The seller is insulted. The price just went up 5%.')}
+}
+function buy(){
+  const d=HOUSES[S.lvl],price=dealPrice();
+  S.snap=null;const snap=JSON.stringify(S);
+  const tasks={};let total=0;
+  [...d.r,...d.u].forEach(i=>tasks[i]={known:1,q:R(.78,1.2)});d.h.forEach(i=>tasks[i]={known:0,q:R(.78,1.2)});
+  for(const i in tasks)total+=TASKS[i].d;
+  S.house={lvl:S.lvl,tasks,chDone:0,chVal:Math.round(d.price*.12),flags:{},risks:[],used:[],bonus:0,fat:0,days:0,term:25+Math.round(total*.95)+(S.perks.credit?15:0),holding:0,askPct:100,offers:[],opens:0,log:[],startNet:net(),inspected:0,paid:price};
+  S.snap=snap;S.deal=null;
+  force(price);S.screen='house';
+  log('Bought '+d.name+' for '+fmt(price)+'. The loan is due in '+S.house.term+' days.');
+}
+function resolve(k){
+  const h=h_(),o=def().opts[k];
+  if(!pay(o.c))return;
+  advance(o.days);rep(o.rep);
+  const msg=o.run(h);h.chDone=1;
+  log(o.t+'. '+msg);
+  if(checkForeclose())return;
+  modal={big:def().emoji,title:o.t,html:'<p>'+msg+'</p>'+(o.rep?'<p class="'+(o.rep>0?'good':'bad')+'">Reputation '+(o.rep>0?'+':'')+o.rep+'</p>':''),btns:[{l:'Get to work',f:()=>modal=null}]};
+}
+function inspect(){
+  const h=h_(),c=S.perks.insp?0:r50(P()*.006);
+  if(!pay(c))return;if(!S.perks.insp)advance(1);
+  h.inspected=1;const found=Object.keys(h.tasks).filter(i=>!h.tasks[i].known&&(S.perks.insp||chance(.8)));
+  found.forEach(i=>h.tasks[i].known=1);
+  const list=found.map(i=>'<li>'+TASKS[i].i+' '+TASKS[i].n+' ('+fmt(proCost(i))+')</li>').join('');
+  log('Inspection found '+found.length+' hidden problem'+(found.length===1?'':'s')+'.');
+  if(checkForeclose())return;
+  modal={big:'🔍',title:'Inspection report',html:(found.length?'<p>The inspector crawled through everything and found:</p><ul>'+list+'</ul>':'<p>The inspector found nothing hidden.</p>')+(S.perks.insp?'':'<p class="muted">Inspectors are thorough, not perfect. Now and then one misses something.</p>'),btns:[{l:'OK',f:()=>modal=null}]};
+}
+function rest(){const h=h_();advance(3);h.fat=Math.max(0,h.fat-3);log('Took three days off. You feel human again.');checkForeclose()}
+function doTask(id,mode){
+  const h=h_(),t=TASKS[id];
+  if(blockers(id).length)return;
+  let cost=mode==='pro'?proCost(id):diyCost(id),days=mode==='pro'?proDays(id):diyDays(id);
+  if(!pay(cost))return;
+  let msg=(mode==='pro'?'Pros finished: ':'You did it yourself: ')+t.n.toLowerCase()+' ('+fmt(cost)+', '+days+' days).';
+  let pop=null;
+  if(mode==='pro'&&h.flags.half)h.flags.half=0;
+  if(mode==='diy'){
+    if(chance(botchP())){const x=r50(baseCost(id)*.4),xd=Math.ceil(days*.5);force(x);days+=xd;
+      pop={big:'🤕',title:'That did not go to plan',html:'<p>Your attempt at "'+t.n.toLowerCase()+'" went sideways. Fixing your fix cost another '+fmt(x)+' and '+xd+' days.</p><p class="muted">The more jobs you do yourself without a break, the more mistakes you make.</p>'};msg+=' Botched it first: +'+fmt(x)+'.'}
+    h.fat++;
+  }
+  advance(days);h.tasks[id].done=1;log(msg);
+  if(checkForeclose())return;
+  const hid=Object.keys(h.tasks).filter(i=>!h.tasks[i].known),roll=Math.random();
+  if(!pop&&hid.length&&roll<.28){const x=pick(hid);h.tasks[x].known=1;h.tasks[x].emerg=1;
+    pop={big:'😱',title:'Surprise behind the wall',html:'<p>While working, the crew uncovered a problem nobody knew about: <b>'+TASKS[x].n.toLowerCase()+'</b>.</p>'+(S.perks.hat?'':'<p>It\'s an emergency job now, so it costs 25% more: '+fmt(proCost(x))+'.</p>')};
+    log('Uncovered a hidden problem: '+TASKS[x].n.toLowerCase()+'.')}
+  else if(!pop&&roll<.5)pop=dilemma();
+  else if(!pop&&roll<.68)pop=randomEvent();
+  if(checkForeclose())return;
+  if(pop){if(!pop.btns)pop.btns=[{l:'OK',f:()=>modal=null}];modal=pop}
+}
+function dilemma(){
+  const h=h_(),pool=DILEMMAS.filter(d=>!h.used.includes(d.id));
+  if(!pool.length)return randomEvent();
+  const d=pick(pool);h.used.push(d.id);
+  return {big:d.big,title:d.title,html:'<p>'+d.text(h)+'</p>',btns:d.opts.map(o=>({l:o.l,cls:'',f:()=>{
+    const m=o.f();if(m===null)return;
+    log(d.title+': '+m);if(checkForeclose())return;
+    modal={big:d.big,title:d.title,html:'<p>'+m+'</p>',btns:[{l:'OK',f:()=>modal=null}]};
+  }}))};
+}
+function randomEvent(){
+  const p=P(),half=S.perks.ins?.5:1,g=S.perks.gen;
+  const ev=pick([
+   ()=>{const x=r50(p*.012*half);force(x);return['🥷','Copper thieves','Someone stripped the copper pipe overnight. Replacing it costs '+fmt(x)+'.']},
+   ()=>{const x=r50(p*.008);gainC(x);return['💿','Attic find','A box of rare vinyl records was wedged behind the insulation. A collector pays '+fmt(x)+'.']},
+   ()=>{if(g)return['⛈️','Storm week','Rain every day, but the tarps and generator keep the job moving.'];advance(4);return['⛈️','Storm week','Rain every day. The job site is a mud pit and you lose 4 days.']},
+   ()=>{rep(5);return['📹','Going viral','Your before-and-after video got 2 million views. Reputation +5.']},
+   ()=>{const x=r50(p*.008*half);force(x);return['👷','City inspector','A surprise visit turns up a permit you never filed. The fine is '+fmt(x)+'.']},
+   ()=>{rep(2);return['🥧','Neighborly',"The neighbor brings over a pie and tells everyone on the block you're doing great work. Reputation +2."]},
+   ()=>{const x=r50(p*.005);gainC(x);return['🧾','Supplier rebate','The lumber yard overcharged you last month and refunds '+fmt(x)+'.']},
+   ()=>{S.market=clamp(S.market+.05,.85,1.15);return['📈','Hot market','A big employer just announced a new office nearby. Buyers are flooding in.']},
+   ()=>{S.market=clamp(S.market-.05,.85,1.15);return['📉','Rate shock','Interest rates jumped this morning. Buyers are getting nervous.']},
+   ()=>{if(g)return['🛻','No-show','Your crew vanished for a day, but you had everything set up to carry on without them.'];advance(3);return['🛻','No-show','Your crew took another job for three days without telling you.']},
+   ()=>{const x=r50(p*.01*half);force(x);return['🧰','Tool theft','The lockbox was cut open overnight. Replacing the tools costs '+fmt(x)+'.']},
+   ()=>{const x=r50(p*.015*half);force(x);return['🚿','Burst pipe','A pipe let go on a Sunday and ran for nine hours. Drying out the damage costs '+fmt(x)+'.']},
+   ()=>{rep(-3);const x=r50(p*.004*half);force(x);return['🎨','Graffiti','Someone tagged the front of the house. Cleaning it costs '+fmt(x)+' and the street looks rougher for it. Reputation -3.']},
+   ()=>{h_().fat+=2;return['🤧','Summer cold','You caught something off the plumber. You are more tired than usual, and mistakes come easier.']},
+   ()=>{rep(4);return['🎖️','The mayor stops by','The mayor poses for a photo with a sledgehammer and calls you a credit to the town. Reputation +4.']},
+   ()=>{const x=r50(p*.01*half);force(x);return['🌳','Tree down','A storm dropped the old oak across the driveway. Removal costs '+fmt(x)+'.']},
+  ])();
+  log(ev[1]+': '+ev[2]);
+  return {big:ev[0],title:ev[1],html:'<p>'+ev[2]+'</p>'};
+}
+
+/* ============ selling ============ */
+function openHouse(kind){
+  const h=h_(),k=OPENS[kind],c=r50(P()*k.c);
+  if(!pay(c))return;
+  advance(k.days);h.opens++;
+  if(checkForeclose())return;
+  const est=estimate(),ask=r500(est*h.askPct/100),done=id=>h.tasks[id]&&h.tasks[id].done;
+  let n=RI(0,2)+k.x+(done('stage')?1:0)+(S.perks.stage?1:0)+(h.flags.press?1:0)+(S.rep>=70?1:0)-(S.rep<35?1:0)-(season()[1]<.97?1:0);
+  n=clamp(n,1,6);
+  const stale=Math.max(.85,1-.03*Math.max(0,h.opens-2)), repM=.95+S.rep*.001;
+  const pool=BUYERS.slice().sort(()=>Math.random()-.5), offers=[];
+  for(let i=0;i<n;i++){
+    let b=pool[i%pool.length];
+    if(h.flags.haunt&&(i===0||chance(.3)))b=GOTH;
+    let m=b.m*repM*stale*R(.95,1.07)+k.b+(S.perks.drone?.03:0);
+    const liked=!!(b.likes&&done(b.likes));
+    if(liked)m+=.06;
+    if(h.flags.haunt&&!b.goth)m*=.85;
+    if(h.flags.blessed)m+=.03;
+    if(h.flags.pests)m*=.93;
+    const max=r500(est*m);let offer=null;
+    if(ask<=max)offer=r500(Math.min(max,ask*R(.95,1)));
+    else if(ask<=max*1.1)offer=r500(max*R(.9,.97));
+    offers.push({name:pick(NAMES),type:b.t,i:b.i,asis:b.asis||0,cash:b.cash||0,liked,why:b.why,max,offer,state:offer?'open':'pass'});
+  }
+  h.offers=offers;
+  const got=offers.filter(o=>o.offer).length;
+  log(k.n+' at '+fmt(ask)+': '+n+' visitor'+(n>1?'s':'')+', '+got+' offer'+(got===1?'':'s')+'.');
+}
+function counter(i){
+  const h=h_(),o=h.offers[i],ask=r500(estimate()*h.askPct/100);
+  const want=r500(ask>o.offer?(o.offer+ask)/2:o.offer*1.04);
+  if(want<=o.max){o.offer=want;o.state='final';toast(o.name+' agrees to '+fmt(want)+'.')}
+  else if(chance(.45)){o.offer=r500(Math.min(o.max,o.offer*1.02));o.state='final';toast(o.name+": \""+fmt(o.offer)+" is my final offer.\"")}
+  else{o.state='gone';toast(o.name+' walked away.')}
+}
+function accept(i){
+  const o=h_().offers[i];
+  if(!o.cash&&!S.perks.broker&&chance(.15)){
+    advance(4);log(o.name+"'s financing fell through. Four days lost.");
+    if(checkForeclose())return;
+    modal={big:'🏦',title:'Financing fell through',html:'<p>'+o.name+"'s bank pulled the mortgage at the last minute. The deal is dead, the other offers have gone cold, and you lost four days.</p><p class=\"muted\">Cash buyers never have this problem.</p>",btns:[{l:'Back on the market',f:()=>modal=null}]};
+    return;
+  }
+  sell(o.offer,o);
+}
+function sell(price,buyer,fire){
+  const h=h_(),d=def(),lines=[['Sale price',price]];
+  let credits=0;
+  if(!fire){const fee=Math.round(price*feeRate());lines.push(['Agent and closing fees ('+Math.round(feeRate()*100)+'%)',-fee]);credits+=fee}
+  if(!fire&&!(buyer&&buyer.asis)){
+    Object.keys(h.tasks).filter(i=>!h.tasks[i].known).forEach(i=>{const c=r50(baseCost(i)*1.5);credits+=c;lines.push(["Buyer's inspector found: "+TASKS[i].n.toLowerCase(),-c])});
+    h.risks.forEach(r=>{if(chance(r.p)){credits+=r.c;lines.push([r.msg,-r.c]);if(r.rp)rep(r.rp)}});
+  }
+  if(h.flags.cut){const c=Math.round(price*.15);credits+=c;lines.push(["Count Orlok's 15%",-c])}
+  S.cash+=price-credits;settle();
+  const profit=Math.round(net()-h.startNet);
+  const stars=profit<=0?0:profit>=d.price*.25?3:profit>=d.price*.12?2:1;
+  rep([-3,2,4,7][stars]);
+  S.stars[h.lvl]=stars;S.profits[h.lvl]=profit;
+  const lvl=h.lvl;S.house=null;S.snap=null;S.lvl=lvl+1;
+  let bail='';
+  if(S.lvl<NH){const need=Math.round(HOUSES[S.lvl].price*.12);if(net()<need){
+    if(S.bail>=3){S.bust=1;bail='<p class="bad">You are too broke for the next house, and Aunt Gertrude has stopped answering the phone. Your career ends here.</p>'}
+    else{const g=need-net();S.cash+=g;settle();rep(-4);S.bail++;
+    bail='<p>You\'re too broke for the next house, so Aunt Gertrude wires you '+fmt(g)+'. She will bring this up at every family dinner. Reputation -4. She will do this '+(3-S.bail)+' more time'+(3-S.bail===1?'':'s')+'.</p>'}}}
+  const rows=lines.map(l=>'<span>'+l[0]+'</span><span class="'+(l[1]<0?'bad':'')+'">'+fmt(l[1])+'</span>').join('');
+  const end=S.lvl>=NH||S.bust;
+  modal={big:stars?'🎉':'😬',title:(fire?'Dumped: ':'Sold: ')+d.name,
+    html:'<p>'+(buyer?buyer.i+' '+buyer.name+' the '+buyer.type.toLowerCase()+' gets the keys':'A cash investor takes it off your hands')+' after '+h.days+' days.</p><div class="kv">'+rows+'</div>'+
+      '<p><span class="label">Profit on this flip</span><br><b class="num '+(profit>0?'good':'bad')+'" style="font-size:26px">'+fmt(profit)+'</b></p><p class="stars" style="font-size:30px">'+starStr(stars)+'</p>'+
+      '<p class="muted">Two stars at '+fmt(d.price*.12)+' profit, three at '+fmt(d.price*.25)+'.</p>'+bail,
+    btns:[{l:end?'See how you did':'Visit the supply shop',f:()=>{modal=null;S.screen=end?'end':'shop'}}]};
+}
+const starStr=n=>'★'.repeat(n)+'<i>'+'★'.repeat(3-n)+'</i>';
+
+/* ============ house picture ============ */
+function houseSVG(lvl,prog,flags){
+  const d=HOUSES[lvl],f=flags||{},st=d.st,w=150+st*38+(d.wide?50:0),x=(400-w)/2,fh=st>2?50:54,bh=st*fh+8,gy=210,top=gy-bh;
+  const dull=prog<.5&&!f.paint, body=f.paint||prog>=1?`hsl(${d.hue} 55% 62%)`:`hsl(${d.hue} ${dull?16:30}% ${dull?48:56}%)`;
+  const roofC=f.roof||prog>=1?'#4a3f52':'#6b6259', night=d.night, rh=d.wide?44:58;
+  let s=`<svg viewBox="0 0 400 250" role="img" aria-label="${d.name}">`;
+  s+=`<rect width="400" height="250" fill="${night?'#1b1d3a':'var(--sky1)'}"/><rect y="120" width="400" height="130" fill="${night?'#23264a':'var(--sky2)'}"/>`;
+  s+=night?`<circle cx="350" cy="36" r="18" fill="#f3efd0"/><circle cx="40" cy="40" r="1.6" fill="#fff"/><circle cx="120" cy="18" r="1.4" fill="#fff"/><circle cx="250" cy="24" r="1.5" fill="#fff"/>`
+          :`<circle cx="352" cy="36" r="18" fill="#f6c945"/><ellipse cx="60" cy="40" rx="30" ry="10" fill="#fff" opacity=".8"/><ellipse cx="86" cy="33" rx="22" ry="9" fill="#fff" opacity=".8"/>`;
+  s+=`<rect y="${gy}" width="400" height="40" fill="${night?'#2c4a35':'var(--grass)'}"/>`;
+  if(d.tower){const tx=x+w-46,ty=Math.max(54,top-56);s+=`<rect x="${tx}" y="${ty}" width="40" height="${gy-ty}" fill="${body}"/><polygon points="${tx-6},${ty} ${tx+20},${ty-40} ${tx+46},${ty}" fill="${roofC}"/><rect x="${tx+12}" y="${ty+12}" width="16" height="22" rx="8" fill="${prog>.6?'#f7dc7a':'#2a2f45'}"/>`}
+  s+=`<rect x="${x}" y="${top}" width="${w}" height="${bh}" fill="${body}"/>`;
+  s+=`<polygon points="${x-16},${top} ${200},${top-rh} ${x+w+16},${top}" fill="${roofC}"/>`;
+  s+=`<rect x="${x+w*.68}" y="${top-rh+8}" width="16" height="30" fill="#7a4a3a"/>`;
+  if(!f.roof&&prog<1)s+=`<polygon points="${x+30},${top-5} ${x+50},${top-18} ${x+62},${top-5}" fill="#2a2430"/>`;
+  const cols=st+1+(d.wide?1:0),ww=26,wh=30,gap=(w-cols*ww)/(cols+1);
+  for(let r=0;r<st;r++)for(let c=0;c<cols;c++){
+    const wx=x+gap+c*(ww+gap),wy=top+12+r*fh;
+    if(r===st-1&&c===Math.floor(cols/2)){s+=`<rect x="${wx-2}" y="${gy-44}" width="${ww+4}" height="44" fill="${prog>=1?'#d5322b':'#5a4034'}"/><circle cx="${wx+ww-4}" cy="${gy-22}" r="2.2" fill="#f1d27a"/>`;continue}
+    s+=`<rect x="${wx}" y="${wy}" width="${ww}" height="${wh}" fill="${prog>.6||f.win?'#f7dc7a':'#2a2f45'}" stroke="#fff" stroke-width="3"/>`;
+    if(!f.win&&prog<1&&(r+c)%2===0)s+=`<path d="M${wx-3} ${wy+6}L${wx+ww+3} ${wy+wh-8}M${wx-3} ${wy+wh-6}L${wx+ww+3} ${wy+8}" stroke="#8a6a45" stroke-width="5"/>`;
+  }
+  if(prog<.45)s+=`<path d="M${x+14} ${top+10}l10 22l-8 16l12 20" stroke="#3a3030" stroke-width="2" fill="none"/>`;
+  if(!f.land&&prog<1)for(let i=0;i<9;i++){const wx2=28+i*44;s+=`<path d="M${wx2} ${gy}l-4 -14M${wx2} ${gy}l2 -18M${wx2} ${gy}l7 -12" stroke="#4d7a3c" stroke-width="2"/>`}
+  else for(let i=0;i<6;i++){const bx=x-30+i*((w+60)/5);if(Math.abs(bx-200)<26||bx<96)continue;s+=`<circle cx="${bx}" cy="${gy-4}" r="12" fill="#3f8a45"/><circle cx="${bx-4}" cy="${gy-9}" r="3" fill="#f08aa8"/><circle cx="${bx+5}" cy="${gy-3}" r="3" fill="#ffd45c"/>`}
+  if(!f.clean&&prog<1)s+=`<rect x="${x+w+8}" y="${gy-16}" width="20" height="16" fill="#7b6a58"/><rect x="${x+w+22}" y="${gy-10}" width="14" height="10" fill="#93806b"/>`;
+  s+=`<rect x="${x}" y="${top}" width="${w}" height="${bh}" fill="#3b2f25" opacity="${(.34*(1-prog)).toFixed(2)}" style="mix-blend-mode:multiply"/>`;
+  if(f.ch)s+=`<text x="${Math.max(4,x-34)}" y="${gy-8}" font-size="40">${d.emoji}</text>`;
+  if(f.sign)s+=`<rect x="44" y="${gy-52}" width="5" height="56" fill="#fff"/><rect x="14" y="${gy-58}" width="64" height="30" rx="3" fill="#d5322b"/><text x="46" y="${gy-38}" font-size="12" font-weight="700" fill="#fff" text-anchor="middle" font-family="sans-serif">${f.sign}</text>`;
+  return s+'</svg>';
+}
+
+/* ============ rendering ============ */
+const on=f=>{H.push(f);return 'data-h="'+(H.length-1)+'"'};
+function toast(m){toastMsg=m;clearTimeout(toastT);toastT=setTimeout(()=>{toastMsg=null;drawOverlay()},3200)}
+function marketLabel(){const m=S.market;return m>1.07?'Hot':m>1.02?'Warm':m>.97?'Steady':m>.92?'Cool':'Cold'}
+const names=a=>a.map(i=>TASKS[i].n.toLowerCase()).join(', ');
+function render(){
+  H=[];save();
+  document.getElementById('hud').innerHTML=
+   `<span class="brand">Flip Street</span>
+    <div class="stat"><span class="label">Cash</span><b class="${S.cash>0?'good':''}">${fmt(S.cash)}</b></div>
+    <div class="stat"><span class="label">Loan</span><b class="${S.debt>0?'bad':''}">${fmt(S.debt)}${S.house?' <span class="muted" style="font-size:11px">/ '+fmt(limit())+'</span>':''}</b></div>
+    <div class="stat"><span class="label">Reputation</span><b>${Math.round(S.rep)}</b></div>
+    <div class="stat"><span class="label">Market</span><b>${season()[0]} · ${marketLabel()}</b></div>
+    <div class="stat"><span class="label">Day</span><b>${S.day}</b></div>
+    <span class="spacer"></span><button class="btn ghost" ${on(()=>{modal={big:'🧨',title:'Start over?',html:'<p>This wipes your whole career and takes you back to house one.</p>',btns:[{l:'Keep playing',cls:'',f:()=>modal=null},{l:'Start over',cls:'primary',f:()=>{newGame();modal=null}}]}})}>New game</button>`;
+  const app=document.getElementById('app');
+  app.innerHTML=S.screen==='end'||S.bust?viewEnd():S.screen==='house'&&S.house?viewHouse():S.screen==='shop'?viewShop():viewMap();
+  if(S.intro&&!modal){modal={big:'🏚️',title:'Welcome to Flip Street',html:'<p>Twenty rough houses, each with a problem nobody else wanted to deal with. Buy one, sort out its problem, fix it up, sell it, and move up the street.</p><p>The bank lends you most of the price, but the loan has a due date. Go past it and your daily costs triple.</p><p>Pros are fast and expensive. Doing it yourself is cheap and slow, and the more tired you get the more you botch. Every neighborhood wants different things, and some jobs have to happen before others.</p><p>You start with '+fmt(25000)+'.</p>',btns:[{l:"Let's flip",cls:'primary',f:()=>{S.intro=0;modal=null}}]}}
+  drawOverlay();
+}
+function drawOverlay(){
+  let s='';
+  if(modal)s+=`<div class="veil"><div class="modal" role="dialog" aria-modal="true"><div class="big">${modal.big||''}</div><h2>${modal.title}</h2>${modal.html}<div class="row">${modal.btns.map((b,i)=>`<button class="btn ${b.cls!==undefined?b.cls:(i===modal.btns.length-1?'primary':'')}" data-m="${i}">${b.l}</button>`).join('')}</div></div></div>`;
+  if(toastMsg)s+=`<div class="toast" role="status">${toastMsg}</div>`;
+  document.getElementById('overlay').innerHTML=s;
+}
+function viewMap(){
+  const total=S.stars.reduce((a,b)=>a+(b||0),0);
+  let s=`<div><h1>Twenty houses. Twenty headaches.</h1><p class="muted" style="max-width:60ch;margin-top:8px">Work your way up the street. ${total} of ${NH*3} stars so far. Aunt Gertrude will bail you out ${3-S.bail} more time${3-S.bail===1?'':'s'}.</p></div><div class="street">`;
+  HOUSES.forEach((d,i)=>{
+    const done=i<S.lvl,cur=i===S.lvl,cls=done?'done':cur?'cur':'locked';
+    const inner=`<span class="art">${houseSVG(i,done?1:0,done?{sign:'SOLD',land:1,paint:1,roof:1,win:1,clean:1}:{ch:1})}</span><span class="info"><span class="label">No. ${i+1} · ${HOODS[d.hood].n}</span><b>${d.name}</b><span class="num muted">${fmt(d.price)}</span>${done?`<span class="stars">${starStr(S.stars[i]||0)}</span><span class="num ${S.profits[i]>0?'good':'bad'}">${fmt(S.profits[i])}</span>`:cur?'<span class="tag" style="color:var(--sign);align-self:flex-start">For sale</span>':'<span class="muted">🔒 Locked</span>'}</span>`;
+    s+=cur?`<button class="lot ${cls}" ${on(()=>dealSheet())}>${inner}</button>`:`<div class="lot ${cls}">${inner}</div>`;
+  });
+  return s+'</div>';
+}
+function dealSheet(){
+  if(S.house){S.screen='house';return}
+  const d=HOUSES[S.lvl],price=dealPrice(),loan=Math.max(0,price-S.cash),hd=HOODS[d.hood],tried=S.deal&&S.deal.lvl===S.lvl;
+  const btns=[{l:'Not yet',cls:'',f:()=>modal=null}];
+  if(!tried)btns.push({l:'Lowball them',cls:'',f:()=>{lowball();modal=null;dealSheet()}});
+  btns.push({l:'Buy it for '+fmt(price),cls:'primary',f:()=>{modal=null;buy()}});
+  modal={big:d.emoji,title:d.name,html:`<p>${d.story}</p><div class="kv"><span>${tried?'Price after haggling':'Asking price'}</span><span>${fmt(price)}</span><span>Your cash</span><span>${fmt(S.cash)}</span><span>Bank loan needed</span><span>${fmt(loan)}</span><span>Taxes and upkeep per day</span><span>${fmt(d.price*.001)}</span></div>
+    <p><b>${hd.n}.</b> Buyers here pay extra for: ${names(hd.loves.filter(i=>d.u.includes(i)))||'nothing in particular'}.</p>
+    <p class="muted">Known repairs: ${d.r.length}. The seller swears there's nothing else wrong with it.${tried?'':' A lowball offer can knock 8% off, or insult the seller and add 5%.'}</p>`,btns};
+}
+function taskRow(id){
+  const h=h_(),t=TASKS[id],st=h.tasks[id];
+  if(st.done)return `<div class="task done"><span class="ico">${t.i}</span><span class="nm">${t.n}</span><span class="good">✓ Done</span></div>`;
+  const pc=proCost(id),dc=diyCost(id),bl=blockers(id),hd=hood();
+  const taste=hd.loves.includes(id)?' <span class="tag good">Wanted here</span>':hd.hates.includes(id)?' <span class="tag bad">Wrong crowd</span>':'';
+  const acts=bl.length?`<span class="muted" style="font-size:12px;max-width:150px;text-align:right">Do first: ${names(bl)}</span>`:
+   `<button class="btn" ${on(()=>doTask(id,'pro'))} ${canPay(pc)?'':'disabled'}>Hire pros<small>${fmt(pc)} · ${proDays(id)}d</small></button>${canDIY(id)?`<button class="btn" ${on(()=>doTask(id,'diy'))} ${canPay(dc)?'':'disabled'}>DIY<small>${fmt(dc)} · ${diyDays(id)}d</small></button>`:'<button class="btn ghost" disabled>Licensed<small>pros only</small></button>'}`;
+  return `<div class="task"><span class="ico">${t.i}</span><span><span class="nm"><b>${t.n}</b></span>${st.emerg&&!S.perks.hat?' <span class="tag bad">Emergency</span>':''}${taste}<br><span class="muted" style="font-size:13px">Appraiser's guess: <span class="num">+${fmt(taskGuess(id))}</span>${t.note?' · '+t.note:''}</span></span><span class="acts">${acts}</span></div>`;
+}
+function viewHouse(){
+  const h=h_(),d=def(),est=estimate(),prog=progress(),ids=Object.keys(h.tasks),hd=hood(),left_=h.term-h.days,bp=Math.round(botchP()*100);
+  const f={ch:!h.chDone,sign:h.opens?'FOR SALE':null};['land','paint','roof','win','clean'].forEach(k=>f[k]=!h.tasks[k]||h.tasks[k].done);
+  const profitNow=Math.round(net()+est*(1-feeRate()-(h.flags.cut?.15:0))-h.startNet);
+  let left=`<div class="col"><div><span class="label">No. ${h.lvl+1} Flip Street · ${hd.n}</span><h2>${d.name}</h2></div>
+   <div class="picture">${houseSVG(h.lvl,prog,f)}</div>
+   <div class="panel"><div class="kv">
+     <span>Paid</span><span>${fmt(h.paid)}</span>
+     <span>Appraised today</span><span><b>${fmt(est)}</b></span>
+     <span>Profit if sold at appraisal</span><span class="${profitNow>0?'good':'bad'}">${fmt(profitNow)}</span>
+     <span>Loan due</span><span class="${left_<=10?'bad':''}">${left_>0?'in '+left_+' days':'OVERDUE'}</span>
+     <span>Costing you per day</span><span class="bad">${fmt(holdPerDay()+intPerDay())}</span>
+     <span>Taxes and interest so far</span><span>${fmt(h.holding)}</span>
+   </div>
+   ${left_<=0?'<p class="bad" style="font-size:13px"><b>The loan is past due.</b> The bank has tripled your daily costs until you sell.</p>':''}
+   ${openRepairs().length&&h.chDone?`<p class="muted" style="font-size:13px">${openRepairs().length} unfinished repair${openRepairs().length>1?'s are':' is'} scaring buyers: each knocks 3% off the appraisal.</p>`:''}
+   <p style="font-size:13px"><b>Buyers here want:</b> ${names(hd.loves.filter(i=>h.tasks[i]))||'nothing special'}.<br><span class="muted">They won't pay for: ${names(hd.hates.filter(i=>h.tasks[i]))||'nothing in particular'}.</span></p></div>
+   <div class="panel"><div class="task" style="padding:0"><span class="ico">${bp<20?'💪':bp<35?'😮‍💨':'🥴'}</span><span><b>You: ${bp<20?'fresh':bp<35?'tired':'exhausted'}</b><br><span class="muted" style="font-size:13px">DIY botch risk is <span class="num">${bp}%</span> and climbs with every job you do yourself.</span></span><span class="acts"><button class="btn" ${on(rest)} ${h.fat?'':'disabled'}>Rest<small>3 days</small></button></span></div></div>
+   <div class="panel"><span class="label">Site diary</span><div class="log">${h.log.map(l=>'<div>'+l+'</div>').join('')}</div></div></div>`;
+  let right='<div class="col">';
+  if(!h.chDone){
+    right+=`<div class="panel hot"><span class="label">Before anything else</span><h3>${d.emoji} ${d.story}</h3><div class="opts">${d.opts.map((o,k)=>`<div class="opt"><b>${o.t}</b><span class="muted" style="font-size:13px">${o.d}</span><span class="num" style="font-size:13px">${o.c?fmt(o.c):'Free'} · ${o.days} day${o.days===1?'':'s'}${o.rep?` · <span class="${o.rep>0?'good':'bad'}">rep ${o.rep>0?'+':''}${o.rep}</span>`:''}</span><button class="btn primary" ${on(()=>resolve(k))} ${canPay(o.c)?'':'disabled'}>Do this</button></div>`).join('')}</div></div>
+     <div class="panel"><p class="muted">Repairs, upgrades and the for-sale sign unlock once this is dealt with.</p></div>`;
+  }else{
+    const reps=ids.filter(i=>TASKS[i].k==='r'&&h.tasks[i].known),ups=ids.filter(i=>TASKS[i].k==='u');
+    if(!h.inspected){const ic=S.perks.insp?0:r50(P()*.006);right+=`<div class="panel"><div class="task"><span class="ico">🔍</span><span><b>Hire a home inspector</b><br><span class="muted" style="font-size:13px">Finds hidden problems before they surprise you mid-job, or before the buyer's inspector bills you for them at closing.</span></span><span class="acts"><button class="btn" ${on(inspect)} ${canPay(ic)?'':'disabled'}>Inspect<small>${ic?fmt(ic)+' · 1d':'Free'}</small></button></span></div></div>`}
+    right+=`<div class="panel"><span class="label">Repairs</span>${reps.map(taskRow).join('')}</div>`;
+    right+=`<div class="panel"><span class="label">Upgrades (optional, and plenty of them lose money)</span>${ups.map(taskRow).join('')}</div>`;
+    const ask=r500(est*h.askPct/100),fire=r500(est*.72);
+    right+=`<div class="panel hot"><span class="label">Sell it</span>
+      <label for="ask">Asking price: <b class="num" id="askv">${fmt(ask)}</b> <span class="muted" id="askp">(${h.askPct}% of appraisal)</span></label>
+      <input type="range" id="ask" min="80" max="135" step="1" value="${h.askPct}">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">${Object.keys(OPENS).map(k=>{const o=OPENS[k],c=r50(P()*o.c);return `<button class="btn ${k==='basic'?'go':''}" ${on(()=>openHouse(k))} ${canPay(c)?'':'disabled'}>${o.n}<small>${c?fmt(c)+' · ':''}${o.days} days${o.x?' · +'+o.x+' buyer'+(o.x>1?'s':''):''}</small></button>`}).join('')}
+      <button class="btn ghost" ${on(()=>{modal={big:'💼',title:'Fire sale?',html:'<p>A cash investor will take the house today, as it stands, for <b>'+fmt(fire)+'</b>. No fees, no inspection, no haggling.</p>',btns:[{l:'Keep going',cls:'',f:()=>modal=null},{l:'Sell for '+fmt(fire),cls:'primary',f:()=>{modal=null;sell(fire,null,true)}}]}})}>Fire sale<small>${fmt(fire)} today</small></button></div>
+      ${h.offers.length?h.offers.map((o,i)=>`<div class="offer ${o.state==='gone'||o.state==='pass'?'gone':''}"><span style="font-size:24px">${o.i}</span><span class="who"><b>${o.name}</b>, ${o.type.toLowerCase()}<br><span class="muted" style="font-size:13px">${o.state==='pass'?'"Too rich for me." Left without an offer.':o.state==='gone'?'Walked away.':(o.liked?o.why+' ':'')+(o.asis?'Buys as-is, skips the inspection. ':'')+(o.cash?'Pays cash.':'Needs a mortgage.')+(o.state==='final'?' Final offer.':'')}</span></span>${o.offer&&o.state!=='gone'?`<b class="num">${fmt(o.offer)}</b><button class="btn go" ${on(()=>accept(i))}>Accept</button>${o.state==='open'?`<button class="btn" ${on(()=>counter(i))}>Counter</button>`:''}`:''}</div>`).join('')+'<p class="muted" style="font-size:13px">Offers expire if you do more work or hold another showing.</p>':h.opens?'<p class="muted">No live offers. Hold another showing, or drop the price. A listing that sits goes stale.</p>':'<p class="muted">Price it near the appraisal and buyers bid close to asking. Reach too high and they lowball or leave. Winter is slow, spring is not.</p>'}
+    </div>`;
+  }
+  return `<div class="site">${left}${right}</div></div>`;
+}
+function viewShop(){
+  const n=HOUSES[S.lvl],prc=r500(n.price*.03*(1+S.pr*.5)),keys=Object.keys(PERKS),owned=keys.filter(k=>S.perks[k]).length;
+  return `<div><h1>Supply shop</h1><p class="muted" style="max-width:62ch;margin-top:8px">Spend some profit on things that last your whole career. You own ${owned} of ${keys.length}. Keep enough cash for No. ${S.lvl+1}: ${n.name} costs ${fmt(n.price)}, and repairs come on top.</p></div>
+   <div class="perks">${keys.map(k=>{const p=PERKS[k],own=S.perks[k];return `<div class="panel"><div style="font-size:28px">${p.i}</div><b>${p.n}</b><span class="muted" style="font-size:13px">${p.d}</span>${own?'<span class="good"><b>✓ Owned</b></span>':`<button class="btn" ${on(()=>{S.cash-=p.c;S.perks[k]=1;toast(p.n+' is yours.')})} ${S.cash>=p.c?'':'disabled'}>Buy<small>${fmt(p.c)}</small></button>`}</div>`}).join('')}
+    <div class="panel"><div style="font-size:28px">⚾</div><b>Sponsor the little league</b><span class="muted" style="font-size:13px">Your name on forty small jerseys. Reputation +8. Costs more every season.</span><button class="btn" ${on(()=>{S.cash-=prc;S.pr++;rep(8);toast('Go Flippers! Reputation +8.')})} ${S.cash>=prc&&S.rep<100?'':'disabled'}>Sponsor<small>${fmt(prc)}</small></button></div></div>
+   <div><button class="btn primary" ${on(()=>{S.screen='map'})}>Back to the street</button></div>`;
+}
+function viewEnd(){
+  const total=S.stars.reduce((a,b)=>a+(b||0),0),tp=S.profits.reduce((a,b)=>a+(b||0),0),n=S.profits.length;
+  const rank=S.bust?'Bankrupt':total>=52?'Flip Street Legend':total>=42?'Renovation Mogul':total>=30?'Seasoned Flipper':total>=16?'Weekend Warrior':'Lovable Money Pit';
+  return `<div><span class="label">${S.bust?'Career over':'Career complete'}</span><h1>${rank}</h1><p class="muted" style="margin-top:8px">${S.bust?'You ran out of money and out of aunts after '+n+' houses.':'You flipped all twenty houses in '+S.day+' days.'}</p></div>
+   <div class="panel" style="max-width:520px"><div class="kv"><span>Net worth</span><span><b>${fmt(net())}</b></span><span>Total profit</span><span class="${tp>0?'good':'bad'}">${fmt(tp)}</span><span>Stars</span><span>${total} / ${NH*3}</span><span>Reputation</span><span>${Math.round(S.rep)}</span></div></div>
+   <div class="panel"><span class="label">Your street</span>${HOUSES.slice(0,n).map((d,i)=>`<div class="task" style="grid-template-columns:28px minmax(0,1fr) auto"><span class="ico">${d.emoji}</span><span><b>${d.name}</b><br><span class="num ${S.profits[i]>0?'good':'bad'}">${fmt(S.profits[i]||0)}</span></span><span class="stars">${starStr(S.stars[i]||0)}</span></div>`).join('')}</div>
+   <div><button class="btn primary" ${on(()=>{newGame()})}>Play again</button></div>`;
+}
+
+/* ============ events ============ */
+document.addEventListener('click',e=>{
+  const m=e.target.closest('[data-m]');
+  if(m&&modal){modal.btns[+m.dataset.m].f();render();return}
+  const b=e.target.closest('[data-h]');
+  if(b&&!b.disabled&&!modal){const f=H[+b.dataset.h];if(f){f();render()}}
+});
+document.addEventListener('input',e=>{
+  if(e.target.id==='ask'&&S.house){S.house.askPct=+e.target.value;
+    document.getElementById('askv').textContent=fmt(r500(estimate()*S.house.askPct/100));
+    document.getElementById('askp').textContent='('+S.house.askPct+'% of appraisal)';save()}
+});
+function start(d){if(d&&d.S&&d.S.bail!==undefined)S=d.S;else load();render()}
+window.claude?.hot?.snapshot?.(()=>({S}));
+window.claude?.hot?.ready?window.claude.hot.ready(start):start(window.claude?.hot?.data??{});
+</script>
+</body>
+</html>
